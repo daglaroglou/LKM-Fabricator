@@ -1,0 +1,86 @@
+name: Patch KernelSU Next
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_url:
+        description: 'URL to boot image'
+        required: false
+        type: string
+      image_base64:
+        description: 'Base64 encoded boot image'
+        required: false
+        type: string
+      patcher_type:
+        description: 'Patcher type'
+        required: true
+        type: string
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download image from URL
+        if: ${{ inputs.image_url != '' }}
+        run: |
+          echo "Downloading image from URL..."
+          curl -L -o boot.img "${{ inputs.image_url }}"
+          ls -lh boot.img
+
+      - name: Decode base64 image
+        if: ${{ inputs.image_base64 != '' }}
+        run: |
+          echo "Decoding base64 image..."
+          echo "${{ inputs.image_base64 }}" | base64 -d > boot.img
+          ls -lh boot.img
+
+      - name: Verify image file
+        run: |
+          if [ ! -f boot.img ]; then
+            echo "Error: boot.img not found!"
+            exit 1
+          fi
+          file boot.img
+          ls -lh boot.img
+
+      - name: Download KernelSU Next
+        run: |
+          echo "Downloading KernelSU Next patcher..."
+          # Using the next branch
+          KERNELSU_VERSION=$(curl -s https://api.github.com/repos/rifsxd/KernelSU-Next/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+          echo "Latest KernelSU Next version: $KERNELSU_VERSION"
+          
+          # Download ksu tool from next branch
+          curl -L -o ksu "https://github.com/rifsxd/KernelSU-Next/releases/download/${KERNELSU_VERSION}/ksu_x86_64-linux"
+          chmod +x ksu
+          ./ksu --version || echo "KSU Next tool ready"
+
+      - name: Patch boot image
+        run: |
+          echo "Patching boot image with KernelSU Next..."
+          ./ksu boot-patch -b boot.img -o boot-patched.img --kmi android14-6.1
+          
+          if [ -f boot-patched.img ]; then
+            echo "Patching successful!"
+            ls -lh boot-patched.img
+          else
+            echo "Error: Patched image not found!"
+            exit 1
+          fi
+
+      - name: Upload patched image
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-kernelsu-next-patched-${{ github.run_id }}
+          path: boot-patched.img
+          retention-days: 1
+
+      - name: Patch complete
+        run: |
+          echo "✅ Patching complete!"
+          echo "Artifact will be available for 1 day"
+          echo "Run ID: ${{ github.run_id }}"
