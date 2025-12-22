@@ -1,7 +1,6 @@
 import { GitHubAPI } from '../github-api';
 import { downloadBlob, formatBytes, formatDate } from '../utils';
 import { WorkflowRun, Artifact } from '../types';
-import { icons } from '../assets/icons';
 
 export function MonitorPage(container: HTMLElement, params?: Record<string, string>) {
   if (!params || !params.id) {
@@ -27,7 +26,6 @@ export function MonitorPage(container: HTMLElement, params?: Record<string, stri
 
   const api = new GitHubAPI(token);
   let pollInterval: number | null = null;
-  let currentRun: WorkflowRun | null = null;
 
   const render = (run: WorkflowRun, logs: string, artifacts: Artifact[]) => {
     const status = run.conclusion || run.status;
@@ -181,7 +179,6 @@ export function MonitorPage(container: HTMLElement, params?: Record<string, stri
       const logs = await api.getWorkflowLogs(runId);
       const artifacts = await api.getArtifacts(runId);
 
-      currentRun = run;
       render(run, logs, artifacts);
 
       // Stop polling if workflow is complete
