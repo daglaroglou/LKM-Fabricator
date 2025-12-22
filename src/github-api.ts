@@ -32,6 +32,24 @@ export class GitHubAPI {
   ): Promise<number> {
     const workflowFile = this.getWorkflowFile(patcherType);
     
+    // Check total input size (GitHub limit is 65,535 characters for all inputs combined)
+    const inputs = {
+      image_url: imageUrl || '',
+      image_base64: imageBase64 || '',
+      patcher_type: patcherType,
+    };
+    
+    const totalSize = Object.values(inputs).reduce((sum, val) => sum + val.length, 0);
+    const MAX_INPUT_SIZE = 65535;
+    
+    if (totalSize > MAX_INPUT_SIZE) {
+      throw new Error(
+        `Inputs are too large (${totalSize.toLocaleString()} characters). ` +
+        `GitHub workflow dispatch has a limit of ${MAX_INPUT_SIZE.toLocaleString()} characters for all inputs combined. ` +
+        `Please use a URL instead of uploading the file directly, or use a smaller file.`
+      );
+    }
+    
     try {
       // Trigger workflow
       await this.octokit.rest.actions.createWorkflowDispatch({
@@ -39,11 +57,7 @@ export class GitHubAPI {
         repo: this.repo,
         workflow_id: workflowFile,
         ref: 'main',
-        inputs: {
-          image_url: imageUrl || '',
-          image_base64: imageBase64 || '',
-          patcher_type: patcherType,
-        },
+        inputs,
       });
 
       // Wait a bit for the workflow to be created

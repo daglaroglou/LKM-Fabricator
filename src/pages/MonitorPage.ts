@@ -26,12 +26,20 @@ export function MonitorPage(container: HTMLElement, params?: Record<string, stri
 
   const api = new GitHubAPI(token);
   let pollInterval: number | null = null;
+  let previousState: {
+    run?: WorkflowRun;
+    logs?: string;
+    artifacts?: Artifact[];
+  } = {};
 
   const render = (run: WorkflowRun, logs: string, artifacts: Artifact[]) => {
     const status = run.conclusion || run.status;
     const isRunning = run.status !== 'completed';
+    const isInitialRender = !previousState.run;
 
-    container.innerHTML = `
+    // Only do full render on initial load
+    if (isInitialRender) {
+      container.innerHTML = `
       <header class="header">
         <div class="header-content">
           <a href="/" class="logo">
@@ -128,8 +136,168 @@ export function MonitorPage(container: HTMLElement, params?: Record<string, stri
       </div>
     `;
 
-    setupEventListeners();
-    scrollLogsToBottom();
+      setupEventListeners();
+      scrollLogsToBottom();
+    } else {
+      // Incremental updates for subsequent renders
+      updateStatusBadge(status);
+      updateLogs(logs);
+      updateArtifacts(artifacts);
+      updateRunningIndicator(isRunning);
+    }
+
+    previousState = { run, logs, artifacts };
+  };
+
+  const updateStatusBadge = (status: string) => {
+    const statusBadge = container.querySelector('.status-badge');
+    if (statusBadge) {
+      statusBadge.className = `status-badge ${status}`;
+      statusBadge.textContent = status;
+    }
+  };
+
+  const updateLogs = (logs: string) => {
+    const logsContainer = document.getElementById('logs-container');
+    if (!logsContainer) return;
+
+    const previousLogs = previousState.logs || '';
+    const wasAtBottom = isScrolledToBottom(logsContainer);
+
+    // Only update if logs changed
+    if (logs !== previousLogs) {
+      logsContainer.innerHTML = logs.split('\n').map(line => {
+        let className = 'log-line';
+        if (line.toLowerCase().includes('error') || line.toLowerCase().includes('failed')) {
+          className += ' error';
+        } else if (line.toLowerCase().includes('success') || line.toLowerCase().includes('completed')) {
+          className += ' success';
+        }
+        return `<div class="${className}">${escapeHtml(line)}</div>`;
+      }).join('');
+
+      // Restore scroll position
+      if (wasAtBottom) {
+        scrollLogsToBottom();
+      }
+    }
+  };
+
+  const updateArtifacts = (artifacts: Artifact[]) => {
+    const previousArtifacts = previousState.artifacts || [];
+    
+    // Check if artifacts changed
+    const artifactsChanged = 
+      artifacts.length !== previousArtifacts.length ||
+      artifacts.some((a, i) => 
+        !previousArtifacts[i] || 
+        a.id !== previousArtifacts[i].id ||
+        a.size_in_bytes !== previousArtifacts[i].size_in_bytes
+      );
+
+    if (!artifactsChanged) return;
+
+    const artifactsList = document.getElementById('artifacts-list');
+    const logsCard = document.getElementById('logs-container')?.closest('.card');
+    const run = previousState.run;
+    const isRunning = run ? run.status !== 'completed' : false;
+    
+    if (artifacts.length > 0) {
+      if (!artifactsList) {
+        // Create artifacts card if it doesn't exist
+        if (logsCard) {
+          const newCard = document.createElement('div');
+          newCard.className = 'card';
+          newCard.innerHTML = `
+            <h3 class="card-title">✨ Patched Images Ready</h3>
+            <div id="artifacts-list"></div>
+            <div class="form-help" style="margin-top: var(--spacing-sm);">
+              💡 Flash the patched boot image to your device using fastboot or a custom recovery
+            </div>
+          `;
+          logsCard.insertAdjacentElement('afterend', newCard);
+        }
+      }
+
+      const updatedArtifactsList = document.getElementById('artifacts-list');
+      if (updatedArtifactsList) {
+        updatedArtifactsList.innerHTML = artifacts.map(artifact => `
+          <div class="flex items-center justify-between" style="padding: var(--spacing-md); background: var(--color-surface-elevated); border: 1px solid var(--color-border-light); border-radius: var(--radius-md); margin-bottom: var(--spacing-sm);">
+            <div>
+              <div style="font-weight: 600; font-size: 1rem; color: var(--color-text);">${artifact.name}</div>
+              <div class="text-secondary" style="font-size: 0.8rem; margin-top: 0.25rem;">
+                ${formatBytes(artifact.size_in_bytes)} • ${formatDate(artifact.created_at)}
+              </div>
+            </div>
+            <button class="btn download-artifact-btn" data-artifact-id="${artifact.id}" data-artifact-name="${artifact.name}">
+              ⬇ Download
+            </button>
+          </div>
+        `).join('');
+
+        // Re-attach event listeners for new buttons
+        setupEventListeners();
+      }
+
+      // Remove empty state card if it exists
+      const emptyStateCard = Array.from(container.querySelectorAll('.card')).find(card => 
+        card.textContent?.includes('No artifacts available') || card.textContent?.includes('Workflow failed')
+      );
+      if (emptyStateCard && emptyStateCard.querySelector('.text-center')) {
+        emptyStateCard.remove();
+      }
+    } else {
+      // Remove artifacts card if no artifacts and workflow is complete
+      if (artifactsList) {
+        const artifactsCard = artifactsList.closest('.card');
+        if (artifactsCard) {
+          artifactsCard.remove();
+        }
+      }
+
+      // Show empty state if workflow is complete
+      if (!isRunning) {
+        const existingEmptyState = Array.from(container.querySelectorAll('.card')).find(card => 
+          card.textContent?.includes('No artifacts available') || card.textContent?.includes('Workflow failed')
+        );
+        if (!existingEmptyState && run) {
+          const logsCard = document.getElementById('logs-container')?.closest('.card');
+          if (logsCard) {
+            const emptyCard = document.createElement('div');
+            emptyCard.className = 'card text-center';
+            emptyCard.innerHTML = `
+              <div style="font-size: 3rem; margin-bottom: var(--spacing-sm); opacity: 0.5;">
+                ${run.conclusion === 'failure' ? '❌' : '⏳'}
+              </div>
+              <p class="text-secondary">
+                ${run.conclusion === 'failure' ? 'Workflow failed. Check the logs above for details.' : 'No artifacts available yet.'}
+              </p>
+            `;
+            logsCard.insertAdjacentElement('afterend', emptyCard);
+          }
+        }
+      }
+    }
+  };
+
+  const updateRunningIndicator = (isRunning: boolean) => {
+    const logsContainer = document.getElementById('logs-container');
+    const logsCard = logsContainer?.closest('.card');
+    const logsTitle = logsCard?.querySelector('h3');
+    if (logsTitle) {
+      const existingSpinner = logsTitle.querySelector('.spinner');
+      if (isRunning && !existingSpinner) {
+        const spinner = document.createElement('span');
+        spinner.className = 'spinner';
+        logsTitle.appendChild(spinner);
+      } else if (!isRunning && existingSpinner) {
+        existingSpinner.remove();
+      }
+    }
+  };
+
+  const isScrolledToBottom = (element: HTMLElement): boolean => {
+    return element.scrollHeight - element.scrollTop <= element.clientHeight + 10;
   };
 
   const setupEventListeners = () => {

@@ -263,6 +263,25 @@ export function HomePage(container: HTMLElement) {
           if (!selectedFile) {
             throw new Error('Please select a file');
           }
+          
+          // Check file size before converting to base64
+          // Base64 increases size by ~33% (4/3 ratio), and GitHub has a 65,535 char limit for all inputs combined
+          // We'll estimate: base64 size ≈ original size * 4/3
+          // Leave some room for other inputs (patcher_type, etc.)
+          const estimatedBase64Size = Math.ceil(selectedFile.size * 4 / 3);
+          const MAX_INPUT_SIZE = 65535;
+          const reservedForOtherInputs = 100; // For patcher_type and image_url
+          const maxFileSizeForBase64 = Math.floor((MAX_INPUT_SIZE - reservedForOtherInputs) * 3 / 4);
+          
+          if (estimatedBase64Size > MAX_INPUT_SIZE - reservedForOtherInputs) {
+            const maxSizeMB = (maxFileSizeForBase64 / (1024 * 1024)).toFixed(1);
+            throw new Error(
+              `File is too large to upload directly (${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB). ` +
+              `GitHub workflow dispatch has a limit of ~${maxSizeMB} MB for base64-encoded files. ` +
+              `Please use the "From URL" option instead and provide a direct download link to your image file.`
+            );
+          }
+          
           imageBase64 = await fileToBase64(selectedFile);
         } else {
           imageUrl = (document.getElementById('image-url') as HTMLInputElement).value;
