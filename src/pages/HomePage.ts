@@ -82,7 +82,7 @@ export function HomePage(container: HTMLElement) {
                 <div class="file-upload-icon">${icons.upload}</div>
                 <div class="file-upload-text">
                   <strong>Click to upload</strong> or drag and drop<br>
-                  <span style="color: var(--color-text-tertiary);">boot.img or init_boot.img (max 500MB)</span>
+                  <span style="color: var(--color-text-tertiary);">boot.img or init_boot.img (any size - will auto-upload to temporary release if needed)</span>
                 </div>
               </div>
               <input type="file" id="file-input" accept=".img" style="display: none;" />
@@ -230,10 +230,7 @@ export function HomePage(container: HTMLElement) {
         return;
       }
 
-      if (file.size > 500 * 1024 * 1024) {
-        errorMessage.innerHTML = '<div class="error-message">⚠️ File size must be less than 500MB</div>';
-        return;
-      }
+      // No size limit - large files will be uploaded to temporary GitHub release
 
       selectedFile = file;
       fileName.innerHTML = `<div class="file-name">${icons.check} ${file.name} <span style="color: var(--color-text-tertiary);">(${(file.size / (1024 * 1024)).toFixed(2)} MB)</span></div>`;
@@ -256,6 +253,9 @@ export function HomePage(container: HTMLElement) {
           throw new Error('GitHub token not configured. Please check your environment configuration.');
         }
 
+        // Initialize API early so it can be used for file uploads
+        const api = new GitHubAPI(githubToken);
+
         let imageUrl: string | undefined;
         let imageBase64: string | undefined;
 
@@ -271,18 +271,28 @@ export function HomePage(container: HTMLElement) {
           const estimatedBase64Size = Math.ceil(selectedFile.size * 4 / 3);
           const MAX_INPUT_SIZE = 65535;
           const reservedForOtherInputs = 100; // For patcher_type and image_url
-          const maxFileSizeForBase64 = Math.floor((MAX_INPUT_SIZE - reservedForOtherInputs) * 3 / 4);
           
           if (estimatedBase64Size > MAX_INPUT_SIZE - reservedForOtherInputs) {
-            const maxSizeMB = (maxFileSizeForBase64 / (1024 * 1024)).toFixed(1);
-            throw new Error(
-              `File is too large to upload directly (${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB). ` +
-              `GitHub workflow dispatch has a limit of ~${maxSizeMB} MB for base64-encoded files. ` +
-              `Please use the "From URL" option instead and provide a direct download link to your image file.`
-            );
+            // File is too large for base64 - upload to temporary GitHub release instead
+            submitBtn.innerHTML = '<span class="spinner"></span> Uploading file to temporary release...';
+            
+            try {
+              // Upload file to temporary GitHub release
+              imageUrl = await api.uploadFileToRelease(selectedFile);
+              // Clear base64 since we're using URL now
+              imageBase64 = undefined;
+            } catch (uploadError) {
+              throw new Error(
+                `File is too large for direct upload (${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB). ` +
+                `Automatic upload to temporary release failed: ${(uploadError as Error).message}. ` +
+                `Please use the "From URL" option instead and provide a direct download link to your image file, ` +
+                `or ensure your GitHub token has 'repo' scope with write permissions.`
+              );
+            }
+          } else {
+            // File is small enough for base64 encoding
+            imageBase64 = await fileToBase64(selectedFile);
           }
-          
-          imageBase64 = await fileToBase64(selectedFile);
         } else {
           imageUrl = (document.getElementById('image-url') as HTMLInputElement).value;
           if (!imageUrl) {
@@ -291,7 +301,6 @@ export function HomePage(container: HTMLElement) {
         }
 
         // Trigger workflow
-        const api = new GitHubAPI(githubToken);
         const runId = await api.triggerWorkflow(selectedPatcher, imageUrl, imageBase64);
 
         // Navigate to monitor page

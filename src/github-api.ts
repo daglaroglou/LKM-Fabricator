@@ -10,9 +10,11 @@ export class GitHubAPI {
   private octokit: Octokit;
   private owner: string;
   private repo: string;
+  private token: string;
 
   constructor(token: string = DEFAULT_TOKEN, owner: string = REPO_OWNER, repo: string = REPO_NAME) {
-    this.octokit = new Octokit({ auth: token || DEFAULT_TOKEN });
+    this.token = token || DEFAULT_TOKEN;
+    this.octokit = new Octokit({ auth: this.token });
     this.owner = owner;
     this.repo = repo;
   }
@@ -156,6 +158,65 @@ export class GitHubAPI {
     });
 
     return data as ArrayBuffer;
+  }
+
+  /**
+   * Uploads a file to a temporary GitHub release and returns the download URL.
+   * This works around GitHub's workflow_dispatch input size limit (65,535 chars).
+   * The release is created as a draft and can be cleaned up later.
+   */
+  async uploadFileToRelease(file: File): Promise<string> {
+    const releaseTag = `temp-upload-${Date.now()}`;
+    const fileName = file.name;
+
+    try {
+      // Create a draft release
+      const { data: release } = await this.octokit.rest.repos.createRelease({
+        owner: this.owner,
+        repo: this.repo,
+        tag_name: releaseTag,
+        name: `Temporary upload: ${fileName}`,
+        body: `Temporary file upload for workflow processing. This release will be automatically cleaned up.`,
+        draft: true,
+        prerelease: false,
+      });
+
+      // Get the upload URL from the release
+      const uploadUrl = release.upload_url.replace(/{[^}]*}$/, '');
+
+      // Upload the file as a release asset using fetch (for browser compatibility)
+      // GitHub requires multipart/form-data or direct binary upload
+      const formData = new FormData();
+      formData.append('file', file, fileName);
+
+      // Use fetch directly since Octokit's uploadReleaseAsset has issues with File objects in browser
+      const response = await fetch(`${uploadUrl}?name=${encodeURIComponent(fileName)}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `token ${this.token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/octet-stream',
+        },
+        body: file, // Send file directly as binary
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to upload asset: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+
+      const asset = await response.json();
+
+      // Return the browser download URL (not the API URL)
+      // The browser_download_url is the direct download link
+      return asset.browser_download_url;
+    } catch (error) {
+      console.error('Error uploading file to release:', error);
+      throw new Error(
+        `Failed to upload file to temporary release: ${(error as Error).message}. ` +
+        `Please ensure your GitHub token has 'repo' scope with write permissions.`
+      );
+    }
   }
 
   private getWorkflowFile(patcherType: PatcherType): string {
