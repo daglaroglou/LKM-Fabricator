@@ -1,0 +1,39 @@
+# Vercel Ignore - files/folders to exclude from deployment
+
+# Documentation (not needed in production)
+CHANGES.md
+SECURITY.md
+
+# Development files
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode
+.idea
+
+# Git
+.git
+.gitignore
+
+# Node
+node_modules
+
+# Testing/Build artifacts (Vercel builds fresh)
+dist
+dist-ssr
+*.local
+
+# Images used for testing
+*.img
+*.img.gz
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*

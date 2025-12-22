@@ -22,53 +22,62 @@ A web-based tool for patching Android boot images with KernelSU, KernelSU Next, 
 ### Installation
 
 1. Clone the repository:
+
 ```bash
-git clone https://github.com/YOUR_USERNAME/LKM-Fabricator.git
+git clone https://github.com/daglaroglou/LKM-Fabricator.git
 cd LKM-Fabricator
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Configure environment variables (copy `.env.example` to `.env`):
+
 ```bash
 cp .env.example .env
 ```
 
-Then edit `.env` file:
+Then edit `.env` file with your GitHub token:
+
 ```bash
 VITE_GITHUB_TOKEN=your_github_token_here
-VITE_GITHUB_OWNER=your_github_username
-VITE_GITHUB_REPO=LKM-Fabricator
 ```
 
 **⚠️ IMPORTANT**: Never commit the `.env` file! It's already in `.gitignore`.
 
 4. Run the development server:
+
 ```bash
 npm run dev
 ```
 
-### GitHub Pages Deployment
+### Vercel Deployment (Recommended)
 
-1. Build the project:
-```bash
-npm run build
-```
+1. Push your code to GitHub (if not already done)
 
-2. The `dist` folder will contain your static files
+2. Go to [Vercel](https://vercel.com) and sign in with your GitHub account
 
-3. Deploy to GitHub Pages:
-   - Go to your repository settings
-   - Navigate to "Pages" section
-   - Select "Deploy from a branch"
-   - Choose `gh-pages` branch and `/root` folder
-   - Save
+3. Click "Add New Project" and import your `LKM-Fabricator` repository
 
-4. Alternatively, use GitHub Actions for automatic deployment:
-   - The site will be available at `https://YOUR_USERNAME.github.io/LKM-Fabricator/`
+4. Configure the project:
+   - **Framework Preset**: Vite
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+   - **Install Command**: `npm install`
+
+5. Add environment variable:
+   - Go to "Environment Variables" section
+   - Add `VITE_GITHUB_TOKEN` with your GitHub Personal Access Token
+   - Make sure to add it for all environments (Production, Preview, Development)
+
+6. Click "Deploy"
+
+7. Your site will be live at `https://your-project-name.vercel.app`
+
+**Note**: The GitHub token is securely stored in Vercel's environment variables and will be embedded during build time.
 
 ### Creating a GitHub Token
 
@@ -180,8 +189,8 @@ const oneHourAgo = Date.now() - (60 * 60 * 1000); // 1 hour in ms
 
 ### Workflow not triggering
 - Verify your GitHub token has `workflow` scope
-- Check repository owner and name in `src/github-api.ts`
 - Ensure workflows are enabled in repository settings
+- Check that the token is correctly set in Vercel environment variables (for production) or `.env` file (for local development)
 
 ### Artifacts not downloading
 - Verify your token has `repo` scope

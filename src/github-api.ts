@@ -1,9 +1,9 @@
 import { Octokit } from 'octokit';
 import { WorkflowRun, WorkflowJob, Artifact, PatcherType } from './types';
 
-// Read from environment variables (configured in .env file)
-const REPO_OWNER = import.meta.env.VITE_GITHUB_OWNER || 'daglaroglou';
-const REPO_NAME = import.meta.env.VITE_GITHUB_REPO || 'LKM-Fabricator';
+// GitHub repository configuration
+const REPO_OWNER = 'daglaroglou';
+const REPO_NAME = 'LKM-Fabricator';
 const DEFAULT_TOKEN = import.meta.env.VITE_GITHUB_TOKEN || '';
 
 export class GitHubAPI {
