@@ -1,6 +1,6 @@
 import { ImageSourceType, PatcherType } from '../types';
 import { GitHubAPI } from '../github-api';
-import { fileToBase64 } from '../utils';
+import { uploadToFilebin } from '../utils';
 import { navigateTo } from '../router';
 import { icons, logos } from '../assets/icons';
 
@@ -82,7 +82,7 @@ export function HomePage(container: HTMLElement) {
                 <div class="file-upload-icon">${icons.upload}</div>
                 <div class="file-upload-text">
                   <strong>Click to upload</strong> or drag and drop<br>
-                  <span style="color: var(--color-text-tertiary);">boot.img or init_boot.img (any size - will auto-upload to temporary release if needed)</span>
+                  <span style="color: var(--color-text-tertiary);">boot.img or init_boot.img (will be uploaded to filebin.net)</span>
                 </div>
               </div>
               <input type="file" id="file-input" accept=".img" style="display: none;" />
@@ -134,7 +134,7 @@ export function HomePage(container: HTMLElement) {
           <h3 class="card-title">${icons.info} How It Works</h3>
           <ol class="how-it-works-list">
             <li>Select your preferred patcher (KernelSU, SUKISU, APatch)</li>
-            <li>Upload your boot.img or provide a direct download URL</li>
+            <li>Upload your boot.img (will be uploaded to filebin.net) or provide a direct download URL</li>
             <li>Click "Start Patching" to trigger the GitHub Actions workflow</li>
             <li>Monitor the patching process in real-time with live logs</li>
             <li>Download your patched boot image when complete</li>
@@ -230,8 +230,6 @@ export function HomePage(container: HTMLElement) {
         return;
       }
 
-      // No size limit - large files will be uploaded to temporary GitHub release
-
       selectedFile = file;
       fileName.innerHTML = `<div class="file-name">${icons.check} ${file.name} <span style="color: var(--color-text-tertiary);">(${(file.size / (1024 * 1024)).toFixed(2)} MB)</span></div>`;
       errorMessage.innerHTML = '';
@@ -264,35 +262,10 @@ export function HomePage(container: HTMLElement) {
             throw new Error('Please select a file');
           }
           
-          // Check file size before converting to base64
-          // Base64 increases size by ~33% (4/3 ratio), and GitHub has a 65,535 char limit for all inputs combined
-          // We'll estimate: base64 size ≈ original size * 4/3
-          // Leave some room for other inputs (patcher_type, etc.)
-          const estimatedBase64Size = Math.ceil(selectedFile.size * 4 / 3);
-          const MAX_INPUT_SIZE = 65535;
-          const reservedForOtherInputs = 100; // For patcher_type and image_url
-          
-          if (estimatedBase64Size > MAX_INPUT_SIZE - reservedForOtherInputs) {
-            // File is too large for base64 - upload to temporary GitHub release instead
-            submitBtn.innerHTML = '<span class="spinner"></span> Uploading file to temporary release...';
-            
-            try {
-              // Upload file to temporary GitHub release
-              imageUrl = await api.uploadFileToRelease(selectedFile);
-              // Clear base64 since we're using URL now
-              imageBase64 = undefined;
-            } catch (uploadError) {
-              throw new Error(
-                `File is too large for direct upload (${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB). ` +
-                `Automatic upload to temporary release failed: ${(uploadError as Error).message}. ` +
-                `Please use the "From URL" option instead and provide a direct download link to your image file, ` +
-                `or ensure your GitHub token has 'repo' scope with write permissions.`
-              );
-            }
-          } else {
-            // File is small enough for base64 encoding
-            imageBase64 = await fileToBase64(selectedFile);
-          }
+          // Upload .img file to filebin.net and get URL
+          submitBtn.innerHTML = '<span class="spinner"></span> Uploading to filebin...';
+          imageUrl = await uploadToFilebin(selectedFile);
+          imageBase64 = undefined;
         } else {
           imageUrl = (document.getElementById('image-url') as HTMLInputElement).value;
           if (!imageUrl) {

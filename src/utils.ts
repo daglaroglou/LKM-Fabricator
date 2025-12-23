@@ -43,3 +43,38 @@ export function downloadBlob(blob: Blob, filename: string) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Uploads a file to filebin.net and returns the download URL
+ * @param file The file to upload
+ * @returns The public download URL for the uploaded file
+ */
+export async function uploadToFilebin(file: File): Promise<string> {
+  try {
+    // Generate a random bin ID
+    const binId = `lkm-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const fileName = file.name;
+
+    // Upload to filebin.net
+    const uploadUrl = `https://filebin.net/${binId}/${fileName}`;
+    
+    const response = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+      },
+      body: file,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to upload to filebin: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    // Return the download URL
+    return uploadUrl;
+  } catch (error) {
+    console.error('Error uploading to filebin:', error);
+    throw new Error(`Failed to upload file to filebin: ${(error as Error).message}`);
+  }
+}
