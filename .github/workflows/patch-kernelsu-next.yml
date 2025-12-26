@@ -55,7 +55,7 @@ jobs:
           echo "Latest Magisk version (for magiskboot tool, mandatory for patching): $MAGISK_VERSION"
 
           # Download magiskboot tool
-          curl -LsSf "https://github.com/topjohnwu/Magisk/releases/download/${MAGISK_VERSION}/Magisk-${MAGISK_VERSION}.apk" | bsdtar -xvOf - lib/arm64-v8a/libmagiskboot.so > ./magiskboot
+          curl -LsSf "https://github.com/topjohnwu/Magisk/releases/download/${MAGISK_VERSION}/Magisk-${MAGISK_VERSION}.apk" | bsdtar -xvOf - lib/x86_64/libmagiskboot.so > ./magiskboot
           chmod a+x ./magiskboot
           
       - name: Patch boot image
