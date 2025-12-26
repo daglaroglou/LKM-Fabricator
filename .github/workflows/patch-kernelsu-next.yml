@@ -5,11 +5,7 @@ on:
     inputs:
       image_url:
         description: 'URL to boot image'
-        required: false
-        type: string
-      image_base64:
-        description: 'Base64 encoded boot image'
-        required: false
+        required: true
         type: string
       patcher_type:
         description: 'Patcher type'
@@ -19,7 +15,7 @@ on:
 jobs:
   patch:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,16 +23,10 @@ jobs:
       - name: Download image from URL
         if: ${{ inputs.image_url != '' }}
         run: |
+          sudo apt install -y libarchive-tools
           echo "Downloading image from URL..."
-          curl -L -o boot.img "${{ inputs.image_url }}"
-          ls -lh boot.img
-
-      - name: Decode base64 image
-        if: ${{ inputs.image_base64 != '' }}
-        run: |
-          echo "Decoding base64 image..."
-          echo "${{ inputs.image_base64 }}" | base64 -d > boot.img
-          ls -lh boot.img
+          aria2c "${{ inputs.image_url }}" -o ./boot.img
+          ls -lh ./boot.img
 
       - name: Verify image file
         run: |
@@ -44,26 +34,34 @@ jobs:
             echo "Error: boot.img not found!"
             exit 1
           fi
-          file boot.img
-          ls -lh boot.img
+          file ./boot.img
+          ls -lh ./boot.img
 
-      - name: Download KernelSU Next
+      - name: Download necessary tools
         run: |
           echo "Downloading KernelSU Next patcher..."
           # Using the next branch
-          KERNELSU_VERSION=$(curl -s https://api.github.com/repos/rifsxd/KernelSU-Next/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+          KERNELSU_VERSION=$(curl -s https://api.github.com/repos/KernelSU-Next/KernelSU-Next/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
           echo "Latest KernelSU Next version: $KERNELSU_VERSION"
-          
+
           # Download ksu tool from next branch
-          curl -L -o ksu "https://github.com/rifsxd/KernelSU-Next/releases/download/${KERNELSU_VERSION}/ksu_x86_64-linux"
-          chmod +x ksu
-          ./ksu --version || echo "KSU Next tool ready"
+          aria2c "https://github.com/KernelSU-Next/KernelSU-Next/releases/download/${KERNELSU_VERSION}/ksud-$(uname -m)-unknown-linux-musl" -o ./ksud
+          chmod a+x ./ksud
+          ./ksud --version || echo "KSU Next tool ready"
+
+          echo "Downloading magiskboot..."
+          # Download magiskboot tool
+          curl -LsSf $(curl -sSf https://api.github.com/repos/KernelSU-Next/KernelSU-Next/releases/latest | grep browser_download_url | cut -d '"' -f 4 | grep -i ".apk"$) | bsdtar -xvOf - lib/x86_64/libmagiskboot.so > ./magiskboot
+          chmod a+x ./magiskboot
 
       - name: Patch boot image
         run: |
           echo "Patching boot image with KernelSU Next..."
-          ./ksu boot-patch -b boot.img -o boot-patched.img --kmi android14-6.1
-          
+          mkdir images/
+          ./ksud boot-patch --magiskboot ./magiskboot --boot boot.img -o images/
+          #./ksud boot-patch --magiskboot ./magiskboot --kmi $KMI --module $KMI_kernelsu.ko --boot boot.img -o images/ # for lkm, wip
+          mv images/*.img "$(basename -s ".img" ${{ inputs.image_url }})-patched.img"
+
           if [ -f boot-patched.img ]; then
             echo "Patching successful!"
             ls -lh boot-patched.img
