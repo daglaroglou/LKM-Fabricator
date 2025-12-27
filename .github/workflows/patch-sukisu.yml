@@ -65,7 +65,7 @@ jobs:
           git clone --depth=1 https://github.com/SukiSU-Ultra/SukiSU-Ultra.git -b $KERNELSU_VERSION ksu_driver
           cd ksu_driver/
           CROSS_NO_WARNINGS=0 cross build --target $(uname -m)-unknown-linux-musl --release --manifest-path ./userspace/ksud/Cargo.toml
-          cp ./userspace/ksud/target/**/release/ksud* ./ksud
+          cp ./userspace/ksud/target/**/release/ksud ./ksud
 
           echo "Downloading magiskboot..."
           # Using latest Magisk release
