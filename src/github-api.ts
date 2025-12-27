@@ -30,14 +30,14 @@ export class GitHubAPI {
   async triggerWorkflow(
     patcherType: PatcherType,
     imageUrl?: string,
-    imageBase64?: string
+    // imageBase64?: string
   ): Promise<number> {
     const workflowFile = this.getWorkflowFile(patcherType);
     
     // Check total input size (GitHub limit is 65,535 characters for all inputs combined)
     const inputs = {
       image_url: imageUrl || '',
-      image_base64: imageBase64 || '',
+      // image_base64: imageBase64 || '',
       patcher_type: patcherType,
     };
     
