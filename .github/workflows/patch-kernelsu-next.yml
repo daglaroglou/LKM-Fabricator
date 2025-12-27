@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       image_url:
-        description: 'URL to boot image'
+        description: 'URL to boot/init_boot image'
         required: true
         type: string
       patcher_type:
@@ -25,17 +25,17 @@ jobs:
         run: |
           sudo apt install -y libarchive-tools
           echo "Downloading image from URL..."
-          aria2c "${{ inputs.image_url }}" -o ./boot.img
-          ls -lh ./boot.img
+          aria2c "${{ inputs.image_url }}" -o ./partition.img
+          ls -lh ./partition.img
 
       - name: Verify image file
         run: |
-          if [ ! -f boot.img ]; then
-            echo "Error: boot.img not found!"
+          if [ ! -f partition.img ]; then
+            echo "Error: partition.img not found!"
             exit 1
           fi
-          file ./boot.img
-          ls -lh ./boot.img
+          file ./partition.img
+          ls -lh ./partition.img
 
       - name: Download necessary tools
         run: |
@@ -56,15 +56,30 @@ jobs:
 
       - name: Patch boot image
         run: |
-          echo "Patching boot image with KernelSU Next..."
-          mkdir images/
-          ./ksud boot-patch --magiskboot ./magiskboot --boot boot.img -o images/
-          #./ksud boot-patch --magiskboot ./magiskboot --kmi $KMI --module $KMI_kernelsu.ko --boot boot.img -o images/ # for lkm, wip
-          mv images/*.img "$(basename -s ".img" ${{ inputs.image_url }})-patched.img"
+          echo "Check whether the provided image is an init_boot image or a regular boot image..."
+          # Unpack header info and parse line by line
+          while read -r key val; do
+              case "$key" in
+                  "HEADER_VER") V=${val//[\[\]]} ;;
+                  "RAMDISK_SZ") R=${val//[\[\]]} ;;
+          esac
+          done < <(./magiskboot unpack -h "./partition.img" 2>&1)
 
-          if [ -f boot-patched.img ]; then
+          # Logic: init_boot or vendor_boot must have Header 4+ and a ramdisk size > 0
+          mkdir images/
+          if [[ ${V:-0} -ge 4 && ${R:-0} -gt 0 ]]; then
+              echo "The provided image is an init_boot.img"
+              #./ksud boot-patch --magiskboot ./magiskboot --kmi $KMI --module $KMI_kernelsu.ko --boot partition.img -o images/ # for lkm, wip
+              #mv images/*.img boot-patched.img
+          else
+              echo "The provided image is an boot.img"
+              ./ksud boot-patch --magiskboot ./magiskboot --boot partition.img -o images/
+              mv images/*.img boot-patched.img
+          fi
+
+          if [ -f *-patched.img ]; then
             echo "Patching successful!"
-            ls -lh boot-patched.img
+            ls -lh *-patched.img
           else
             echo "Error: Patched image not found!"
             exit 1
