@@ -4,11 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       image_url:
-        description: 'URL to boot image'
-        required: false
-        type: string
-      image_base64:
-        description: 'Base64 encoded boot image'
+        description: 'URL to boot/init_boot image'
         required: false
         type: string
       patcher_type:
@@ -19,53 +15,93 @@ on:
 jobs:
   patch:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Setup the environment
+        run: |
+          sudo apt install -y libarchive-tools
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          # source ~/.bashrc
+          source ~/.profile
+          rustup component add cargo
+          rustup toolchain install stable
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
+          sudo ln -sf ~/.rustup/toolchains/stable-$(uname -m)-unknown-linux-gnu/bin/rustc /usr/bin/rustc
+          sudo ln -sf ~/.rustup/toolchains/stable-$(uname -m)-unknown-linux-gnu/bin/cargo /usr/bin/cargo
+          source ~/.profile
+          RUSTFLAGS="" cargo install cross --git https://github.com/cross-rs/cross --rev 66845c1
+
+      - name: Set up Docker
+        uses: docker/setup-docker-action@v4
 
       - name: Download image from URL
         if: ${{ inputs.image_url != '' }}
         run: |
           echo "Downloading image from URL..."
-          curl -L -o boot.img "${{ inputs.image_url }}"
-          ls -lh boot.img
-
-      - name: Decode base64 image
-        if: ${{ inputs.image_base64 != '' }}
-        run: |
-          echo "Decoding base64 image..."
-          echo "${{ inputs.image_base64 }}" | base64 -d > boot.img
-          ls -lh boot.img
+          aria2c "${{ inputs.image_url }}" -o ./partition.img
+          ls -lh ./partition.img
 
       - name: Verify image file
         run: |
-          if [ ! -f boot.img ]; then
-            echo "Error: boot.img not found!"
+          if [ ! -f partition.img ]; then
+            echo "Error: partition.img not found!"
             exit 1
           fi
-          file boot.img
-          ls -lh boot.img
+          file ./partition.img
+          ls -lh ./partition.img
 
-      - name: Download KernelSU
+      - name: Download necessary tools
         run: |
-          echo "Downloading KernelSU patcher..."
+          echo "Compiling KernelSU patcher..."
+          # Using the latest release tag
           KERNELSU_VERSION=$(curl -s https://api.github.com/repos/tiann/KernelSU/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
           echo "Latest KernelSU version: $KERNELSU_VERSION"
-          
-          # Download ksu tool
-          curl -L -o ksu "https://github.com/tiann/KernelSU/releases/download/${KERNELSU_VERSION}/ksu_x86_64-linux"
-          chmod +x ksu
-          ./ksu --version || echo "KSU tool ready"
+
+          # Compile ksud
+          git clone --depth=1 https://github.com/tiann/KernelSU.git -b $KERNELSU_VERSION ksu_driver
+          cd ksu_driver/
+          CROSS_NO_WARNINGS=0 cross build --target $(uname -m)-unknown-linux-musl --release --manifest-path ./userspace/ksud/Cargo.toml
+          cp ./userspace/ksud/target/**/release/ksud* ./ksud
+
+          echo "Downloading magiskboot..."
+          # Using latest Magisk release
+          MAGISK_VERSION=$(curl -s https://api.github.com/repos/topjohnwu/Magisk/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+          echo "Latest Magisk version (for magiskboot tool, mandatory for patching): $MAGISK_VERSION"
+
+          # Download magiskboot tool
+          curl -LsSf "https://github.com/topjohnwu/Magisk/releases/download/${MAGISK_VERSION}/Magisk-${MAGISK_VERSION}.apk" | bsdtar -xvOf - lib/x86_64/libmagiskboot.so > ./magiskboot
+          chmod a+x ./magiskboot
 
       - name: Patch boot image
         run: |
-          echo "Patching boot image with KernelSU..."
-          ./ksu boot-patch -b boot.img -o boot-patched.img --kmi android13-5.15
-          
-          if [ -f boot-patched.img ]; then
+          echo "Check whether the provided image is an init_boot image or a regular boot image..."
+          # Unpack header info and parse line by line
+          while read -r key val; do
+              case "$key" in
+                  "HEADER_VER") V=${val//[\[\]]} ;;
+                  "RAMDISK_SZ") R=${val//[\[\]]} ;;
+          esac
+          done < <(./magiskboot unpack -h "./partition.img" 2>&1)
+
+          # Logic: init_boot or vendor_boot must have Header 4+ and a ramdisk size > 0
+          mkdir images/
+          if [[ ${V:-0} -ge 4 && ${R:-0} -gt 0 ]]; then
+              echo "The provided image is an init_boot.img"
+              #./ksud boot-patch --magiskboot ./magiskboot --kmi $KMI --module $KMI_kernelsu.ko --boot partition.img -o images/ # for lkm, wip
+              #mv images/*.img init_boot-patched.img
+          else
+              echo "The provided image is an boot.img"
+              ./ksud boot-patch --magiskboot ./magiskboot --boot partition.img -o images/
+              mv images/*.img boot-patched.img
+          fi
+
+          if [ -f *-patched.img ]; then
             echo "Patching successful!"
-            ls -lh boot-patched.img
+            ls -lh *-patched.img
           else
             echo "Error: Patched image not found!"
             exit 1
