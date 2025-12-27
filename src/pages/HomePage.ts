@@ -1,6 +1,6 @@
 import { ImageSourceType, PatcherType } from '../types';
 import { GitHubAPI } from '../github-api';
-import { uploadToFilebin } from '../utils';
+import { uploadToCatbox } from '../utils';
 import { navigateTo } from '../router';
 import { icons, logos } from '../assets/icons';
 
@@ -82,7 +82,7 @@ export function HomePage(container: HTMLElement) {
                 <div class="file-upload-icon">${icons.upload}</div>
                 <div class="file-upload-text">
                   <strong>Click to upload</strong> or drag and drop<br>
-                  <span style="color: var(--color-text-tertiary);">boot.img or init_boot.img (will be uploaded to filebin.net)</span>
+                  <span style="color: var(--color-text-tertiary);">boot.img or init_boot.img (will be uploaded to Catbox.moe)</span>
                 </div>
               </div>
               <input type="file" id="file-input" accept=".img" style="display: none;" />
@@ -134,7 +134,7 @@ export function HomePage(container: HTMLElement) {
           <h3 class="card-title">${icons.info} How It Works</h3>
           <ol class="how-it-works-list">
             <li>Select your preferred patcher (KernelSU, SUKISU, APatch)</li>
-            <li>Upload your boot.img (will be uploaded to filebin.net) or provide a direct download URL</li>
+            <li>Upload your boot.img (will be uploaded to Catbox.moe) or provide a direct download URL</li>
             <li>Click "Start Patching" to trigger the GitHub Actions workflow</li>
             <li>Monitor the patching process in real-time with live logs</li>
             <li>Download your patched boot image when complete</li>
@@ -255,17 +255,17 @@ export function HomePage(container: HTMLElement) {
         const api = new GitHubAPI(githubToken);
 
         let imageUrl: string | undefined;
-        let imageBase64: string | undefined;
+        // let imageBase64: string | undefined;
 
         if (sourceType === 'file') {
           if (!selectedFile) {
             throw new Error('Please select a file');
           }
           
-          // Upload .img file to filebin.net and get URL
-          submitBtn.innerHTML = '<span class="spinner"></span> Uploading to filebin...';
-          imageUrl = await uploadToFilebin(selectedFile);
-          imageBase64 = undefined;
+          // Upload .img file to Catbox.moe and get URL
+          submitBtn.innerHTML = '<span class="spinner"></span> Uploading to Catbox.moe...';
+          imageUrl = await uploadToCatbox(selectedFile);
+          // imageBase64 = undefined;
         } else {
           imageUrl = (document.getElementById('image-url') as HTMLInputElement).value;
           if (!imageUrl) {
@@ -274,7 +274,7 @@ export function HomePage(container: HTMLElement) {
         }
 
         // Trigger workflow
-        const runId = await api.triggerWorkflow(selectedPatcher, imageUrl, imageBase64);
+        const runId = await api.triggerWorkflow(selectedPatcher, imageUrl); // , imageBase64);
 
         // Navigate to monitor page
         navigateTo(`/monitor/${runId}`);

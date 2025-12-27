@@ -78,3 +78,27 @@ export async function uploadToFilebin(file: File): Promise<string> {
     throw new Error(`Failed to upload file to filebin: ${(error as Error).message}`);
   }
 }
+
+export async function uploadToCatbox(file: File): Promise<string> {
+  try {
+    const formData = new FormData();
+    formData.append('reqtype', 'fileupload');
+    formData.append('fileToUpload', file);
+
+    // Using a CORS proxy because Catbox does not send CORS headers to GitHub
+    const proxy = "https://corsproxy.io/?";
+    const target = "https://catbox.moe/user/api.php";
+
+    const response = await fetch(proxy + encodeURIComponent(target), {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) throw new Error(`Catbox error: ${response.status}`);
+
+    const downloadUrl = await response.text();
+    return downloadUrl.trim(); // Returns the direct link
+  } catch (error) {
+    throw new Error(`Catbox Upload Failed: ${(error as Error).message}`);
+  }
+}
