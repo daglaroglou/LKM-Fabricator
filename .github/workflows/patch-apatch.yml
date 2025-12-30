@@ -5,17 +5,17 @@ on:
     inputs:
       image_url:
         description: 'URL to boot image'
-        required: false
+        required: true
         type: string
-      image_base64:
-        description: 'Base64 encoded boot image'
-        required: false
+      image_skey:
+        description: 'APatch SuperKey password (no symbols)'
+        required: true
         type: string
 
 jobs:
   patch:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,52 +23,105 @@ jobs:
       - name: Download image from URL
         if: ${{ inputs.image_url != '' }}
         run: |
+          sudo apt install -y libarchive-tools
           echo "Downloading image from URL..."
-          curl -L -o boot.img "${{ inputs.image_url }}"
-          ls -lh boot.img
-
-      - name: Decode base64 image
-        if: ${{ inputs.image_base64 != '' }}
-        run: |
-          echo "Decoding base64 image..."
-          echo "${{ inputs.image_base64 }}" | base64 -d > boot.img
-          ls -lh boot.img
+          aria2c "${{ inputs.image_url }}" -o ./partition.img
+          ls -lh ./partition.img
 
       - name: Verify image file
         run: |
-          if [ ! -f boot.img ]; then
-            echo "Error: boot.img not found!"
+          if [ ! -f partition.img ]; then
+            echo "Error: partition.img not found!"
             exit 1
           fi
-          file boot.img
-          ls -lh boot.img
+          file ./partition.img
+          ls -lh ./partition.img
 
-      - name: Download APatch
+      - name: Download necessary tools
         run: |
-          echo "Downloading APatch patcher..."
-          APATCH_VERSION=$(curl -s https://api.github.com/repos/bmax121/APatch/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
-          echo "Latest APatch version: $APATCH_VERSION"
-          
-          # Download apatch tool
-          curl -L -o apatch "https://github.com/bmax121/APatch/releases/download/${APATCH_VERSION}/apatch_x86_64-linux"
-          chmod +x apatch
-          ./apatch --version || echo "APatch tool ready"
+          echo "Downloading APatch/KernelPatch patcher..."
+          # Using the latest release
+          KERNELPATCH_VERSION=$(curl -s https://api.github.com/repos/bmax121/KernelPatch/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+          echo "Latest KernelPatch version: $KERNELPATCH_VERSION"
+
+          # Download kptools
+          aria2c "https://github.com/bmax121/KernelPatch/releases/download/${KERNELPATCH_VERSION}/kptools-linux" -o ./kptools
+          chmod a+x ./kptools
+          if ./kptools --version; then echo "APatch/KernelPatch tool ready"; fi
+
+          # Download kpimg
+          aria2c "https://github.com/bmax121/KernelPatch/releases/download/${KERNELPATCH_VERSION}/kpimg-android"
+          echo "APatch module ready"
+
+          echo "Downloading magiskboot..."
+          # Using latest Magisk APK
+          MAGISK_VERSION=$(curl -s https://api.github.com/repos/topjohnwu/Magisk/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+          echo "Latest Magisk version: $MAGISK_VERSION"
+
+          # Download magiskboot tool
+          curl -LsSf $(curl -sSf https://api.github.com/repos/topjohnwu/Magisk/releases/latest | grep browser_download_url | cut -d '"' -f 4 | grep -i ".apk"$) | bsdtar -xvOf - lib/x86_64/libmagiskboot.so > ./magiskboot
+          chmod a+x ./magiskboot
 
       - name: Patch boot image
+        id: image_patch
         run: |
-          echo "Patching boot image with APatch..."
-          ./apatch boot-patch -b boot.img -o boot-patched.img
-          
-          if [ -f boot-patched.img ]; then
+          echo "Check whether the provided image is an init_boot image or a regular boot image..."
+          # Unpack header info and parse line by line
+          while read -r key val; do
+              case "$key" in
+                  "VENDOR_BOOT_HDR") VBOOT=1 ;;
+                  "HEADER_VER") V=${val//[\[\]]} ;;
+                  "RAMDISK_SZ") R=${val//[\[\]]} ;;
+          esac
+          done < <(./magiskboot unpack -h "./partition.img" 2>&1)
+
+          # Logic: init_boot or vendor_boot must have Header 4+ and a ramdisk size > 0
+          mkdir images/
+          if [[ ${V:-0} -ge 4 && ${R:-0} -gt 0 ]]; then
+              if [[ $VBOOT == 1 ]]; then
+                echo "image=vendor_boot" >> $GITHUB_OUTPUT
+                echo "The provided image is a vendor_boot.img, and is unsupported. Please provide a regular boot.img next time."
+              else
+                echo "image=init_boot" >> $GITHUB_OUTPUT
+                echo "The provided image is an init_boot.img, and is unsupported. Please provide a regular boot.img next time."
+              fi
+              exit 1
+          else
+              echo "image=boot" >> $GITHUB_OUTPUT
+              echo "The provided image is a boot.img"
+              ./magiskboot unpack partition.img
+              mv kernel kernel.orig
+              ./kptools -p --image kernel.orig --skey "${{ github.event.inputs.image_skey }}" --kpimg kpimg-android --out kernel
+              ./magiskboot repack partition.img boot-patched.img
+          fi
+
+          if [ -f *-patched.img ]; then
             echo "Patching successful!"
-            ls -lh boot-patched.img
+            ls -lh *-patched.img
           else
             echo "Error: Patched image not found!"
             exit 1
           fi
 
-      - name: Upload patched image
+      # - name: Upload patched vendor_boot image
+      #   uses: actions/upload-artifact@v4
+      #   if: steps.image_patch.outputs.image == 'vendor_boot'
+      #   with:
+      #     name: vendor_boot-apatch-patched-${{ github.run_id }}
+      #     path: vendor_boot-patched.img
+      #     retention-days: 1
+
+      # - name: Upload patched init_boot image
+      #   uses: actions/upload-artifact@v4
+      #   if: steps.image_patch.outputs.image == 'init_boot'
+      #   with:
+      #     name: init_boot-apatch-patched-${{ github.run_id }}
+      #     path: init_boot-patched.img
+      #     retention-days: 1
+
+      - name: Upload patched boot image
         uses: actions/upload-artifact@v4
+        if: steps.image_patch.outputs.image == 'boot'
         with:
           name: boot-apatch-patched-${{ github.run_id }}
           path: boot-patched.img
