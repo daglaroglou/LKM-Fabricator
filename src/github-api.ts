@@ -224,6 +224,7 @@ export class GitHubAPI {
       'kernelsu-next': 'patch-kernelsu-next.yml',
       'sukisu': 'patch-sukisu.yml',
       'apatch': 'patch-apatch.yml',
+      'magisk': 'patch-magisk.yml',
     };
 
     return workflowMap[patcherType];

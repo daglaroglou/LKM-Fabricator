@@ -1,0 +1,19 @@
+name: Patch Magisk
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_url:
+        description: 'URL to boot/init_boot image'
+        required: false
+        type: string
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+        # TODO

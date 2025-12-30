@@ -1,4 +1,4 @@
-export type PatcherType = 'kernelsu' | 'kernelsu-next' | 'sukisu' | 'apatch';
+export type PatcherType = 'kernelsu' | 'kernelsu-next' | 'sukisu' | 'apatch' | 'magisk';
 
 export type ImageSourceType = 'file' | 'url';
 

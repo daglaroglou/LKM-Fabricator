@@ -3,12 +3,14 @@ import kernelsuLogo from './kernelsu.png';
 import kernelsuNextLogo from './kernelsu_next.png';
 import sukisuLogo from './sukisu.png';
 import apatchLogo from './apatch.png';
+import magiskLogo from './magisk.png';
 
 export const logos = {
   kernelsu: kernelsuLogo,
   'kernelsu-next': kernelsuNextLogo,
   sukisu: sukisuLogo,
   apatch: apatchLogo,
+  magisk: magiskLogo,
 };
 
 export const icons = {

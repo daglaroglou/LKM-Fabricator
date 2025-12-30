@@ -16,7 +16,7 @@ const patcherInfo = {
     logo: logos['kernelsu-next']
   },
   sukisu: {
-    name: 'SUKISU',
+    name: 'SukiSU Ultra',
     description: 'Enhanced KernelSU fork',
     logo: logos.sukisu
   },
@@ -24,6 +24,11 @@ const patcherInfo = {
     name: 'APatch',
     description: 'Alternative kernel patching method',
     logo: logos.apatch
+  },
+  magisk: {
+    name: 'Magisk',
+    description: 'The original root solution for Android',
+    logo: logos.magisk
   }
 };
 
@@ -133,7 +138,7 @@ export function HomePage(container: HTMLElement) {
         <div class="card">
           <h3 class="card-title">${icons.info} How It Works</h3>
           <ol class="how-it-works-list">
-            <li>Select your preferred patcher (KernelSU, SUKISU, APatch)</li>
+            <li>Select your preferred patcher</li>
             <li>Upload your boot.img (will be uploaded to Catbox.moe) or provide a direct download URL</li>
             <li>Click "Start Patching" to trigger the GitHub Actions workflow</li>
             <li>Monitor the patching process in real-time with live logs</li>
