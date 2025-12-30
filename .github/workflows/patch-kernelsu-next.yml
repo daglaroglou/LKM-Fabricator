@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       image_url:
-        description: 'URL to boot/init_boot image'
+        description: 'URL to boot/init_boot/vendor_boot image'
         required: true
         type: string
       image_kmi:
@@ -69,6 +69,7 @@ jobs:
           # Unpack header info and parse line by line
           while read -r key val; do
               case "$key" in
+                  "VENDOR_BOOT_HDR") VBOOT=1 ;;
                   "HEADER_VER") V=${val//[\[\]]} ;;
                   "RAMDISK_SZ") R=${val//[\[\]]} ;;
           esac
@@ -77,10 +78,19 @@ jobs:
           # Logic: init_boot or vendor_boot must have Header 4+ and a ramdisk size > 0
           mkdir images/
           if [[ ${V:-0} -ge 4 && ${R:-0} -gt 0 ]]; then
-              echo "image=init_boot" >> $GITHUB_OUTPUT
-              echo "The provided image is an init_boot.img"
+              if [[ $VBOOT == 1 ]]; then
+                echo "image=vendor_boot" >> $GITHUB_OUTPUT
+                echo "The provided image is a vendor_boot.img"
+              else
+                echo "image=init_boot" >> $GITHUB_OUTPUT
+                echo "The provided image is an init_boot.img"
+              fi
               ./ksud boot-patch --magiskboot ./magiskboot --kmi ${{ github.event.inputs.image_kmi }} --boot partition.img -o images/
-              mv images/*.img init_boot-patched.img
+              if [[ $VBOOT == 1 ]]; then
+                mv images/*.img vendor_boot-patched.img
+              else
+                mv images/*.img init_boot-patched.img
+              fi
           else
               echo "image=boot" >> $GITHUB_OUTPUT
               echo "The provided image is an boot.img"
@@ -95,6 +105,14 @@ jobs:
             echo "Error: Patched image not found!"
             exit 1
           fi
+
+      - name: Upload patched vendor_boot image
+        uses: actions/upload-artifact@v4
+        if: steps.image_patch.outputs.image == 'vendor_boot'
+        with:
+          name: vendor_boot-kernelsu-next-patched-${{ github.run_id }}
+          path: vendor_boot-patched.img
+          retention-days: 1
 
       - name: Upload patched init_boot image
         uses: actions/upload-artifact@v4
