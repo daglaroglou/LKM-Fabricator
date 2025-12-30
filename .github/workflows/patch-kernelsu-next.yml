@@ -7,10 +7,6 @@ on:
         description: 'URL to boot/init_boot image'
         required: true
         type: string
-      patcher_type:
-        description: 'Patcher type'
-        required: true
-        type: string
 
 jobs:
   patch:

@@ -38,7 +38,6 @@ export class GitHubAPI {
     const inputs = {
       image_url: imageUrl || '',
       // image_base64: imageBase64 || '',
-      patcher_type: patcherType,
     };
     
     const totalSize = Object.values(inputs).reduce((sum, val) => sum + val.length, 0);

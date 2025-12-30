@@ -11,10 +11,6 @@ on:
         description: 'Base64 encoded boot image'
         required: false
         type: string
-      patcher_type:
-        description: 'Patcher type'
-        required: true
-        type: string
 
 jobs:
   patch:
