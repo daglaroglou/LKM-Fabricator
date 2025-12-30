@@ -383,6 +383,6 @@ export function MonitorPage(container: HTMLElement, params?: Record<string, stri
   // Initial load
   updatePage();
 
-  // Poll every 3 seconds
-  pollInterval = window.setInterval(updatePage, 3000);
+  // Poll every 1 second for faster updates
+  pollInterval = window.setInterval(updatePage, 1000);
 }
