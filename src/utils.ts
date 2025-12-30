@@ -79,7 +79,10 @@ export async function uploadToFilebin(file: File): Promise<string> {
   }
 }
 
-export async function uploadToCatbox(file: File): Promise<string> {
+export async function uploadToCatbox(
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<string> {
   try {
     const formData = new FormData();
     formData.append('reqtype', 'fileupload');
@@ -89,15 +92,38 @@ export async function uploadToCatbox(file: File): Promise<string> {
     const proxy = "https://corsproxy.io/?";
     const target = "https://catbox.moe/user/api.php";
 
-    const response = await fetch(proxy + encodeURIComponent(target), {
-      method: 'POST',
-      body: formData,
+    // Create XMLHttpRequest for progress tracking
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      // Track upload progress
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) {
+          const percentComplete = (e.loaded / e.total) * 100;
+          onProgress(percentComplete);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const downloadUrl = xhr.responseText.trim();
+          resolve(downloadUrl);
+        } else {
+          reject(new Error(`Catbox error: ${xhr.status}`));
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        reject(new Error('Network error during upload'));
+      });
+
+      xhr.addEventListener('abort', () => {
+        reject(new Error('Upload cancelled'));
+      });
+
+      xhr.open('POST', proxy + encodeURIComponent(target));
+      xhr.send(formData);
     });
-
-    if (!response.ok) throw new Error(`Catbox error: ${response.status}`);
-
-    const downloadUrl = await response.text();
-    return downloadUrl.trim(); // Returns the direct link
   } catch (error) {
     throw new Error(`Catbox Upload Failed: ${(error as Error).message}`);
   }

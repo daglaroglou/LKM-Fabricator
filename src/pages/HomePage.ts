@@ -87,11 +87,17 @@ export function HomePage(container: HTMLElement) {
                 <div class="file-upload-icon">${icons.upload}</div>
                 <div class="file-upload-text">
                   <strong>Click to upload</strong> or drag and drop<br>
-                  <span style="color: var(--color-text-tertiary);">boot.img or init_boot.img (will be uploaded to Catbox.moe)</span>
+                  <span style="color: var(--color-text-tertiary);">boot.img | init_boot.img | vendor_boot.img</span>
                 </div>
               </div>
               <input type="file" id="file-input" accept=".img" style="display: none;" />
               <div id="file-name"></div>
+              <div id="upload-progress" style="display: none;">
+                <div class="progress-bar-container">
+                  <div class="progress-bar" id="progress-bar"></div>
+                </div>
+                <div class="progress-text" id="progress-text">0%</div>
+              </div>
             </div>
 
             <!-- URL Input -->
@@ -267,9 +273,21 @@ export function HomePage(container: HTMLElement) {
             throw new Error('Please select a file');
           }
           
-          // Upload .img file to Catbox.moe and get URL
+          // Show progress bar
+          const uploadProgress = document.getElementById('upload-progress') as HTMLDivElement;
+          const progressBar = document.getElementById('progress-bar') as HTMLDivElement;
+          const progressText = document.getElementById('progress-text') as HTMLDivElement;
+          uploadProgress.style.display = 'block';
+          
+          // Upload .img file to Catbox.moe and get URL with progress tracking
           submitBtn.innerHTML = '<span class="spinner"></span> Uploading to Catbox.moe...';
-          imageUrl = await uploadToCatbox(selectedFile);
+          imageUrl = await uploadToCatbox(selectedFile, (progress) => {
+            progressBar.style.width = `${progress}%`;
+            progressText.textContent = `${Math.round(progress)}%`;
+          });
+          
+          // Hide progress bar after upload
+          uploadProgress.style.display = 'none';
           // imageBase64 = undefined;
         } else {
           imageUrl = (document.getElementById('image-url') as HTMLInputElement).value;

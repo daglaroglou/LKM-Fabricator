@@ -164,7 +164,10 @@ export class GitHubAPI {
    * This works around GitHub's workflow_dispatch input size limit (65,535 chars).
    * The release is created as a draft and can be cleaned up later.
    */
-  async uploadFileToRelease(file: File): Promise<string> {
+  async uploadFileToRelease(
+    file: File,
+    onProgress?: (progress: number) => void
+  ): Promise<string> {
     const releaseTag = `temp-upload-${Date.now()}`;
     const fileName = file.name;
 
@@ -183,32 +186,45 @@ export class GitHubAPI {
       // Get the upload URL from the release
       const uploadUrl = release.upload_url.replace(/{[^}]*}$/, '');
 
-      // Upload the file as a release asset using fetch (for browser compatibility)
-      // GitHub requires multipart/form-data or direct binary upload
-      const formData = new FormData();
-      formData.append('file', file, fileName);
+      // Upload the file with progress tracking using XMLHttpRequest
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
 
-      // Use fetch directly since Octokit's uploadReleaseAsset has issues with File objects in browser
-      const response = await fetch(`${uploadUrl}?name=${encodeURIComponent(fileName)}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `token ${this.token}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/octet-stream',
-        },
-        body: file, // Send file directly as binary
+        // Track upload progress
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable && onProgress) {
+            const percentComplete = (e.loaded / e.total) * 100;
+            onProgress(percentComplete);
+          }
+        });
+
+        xhr.addEventListener('load', async () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const asset = JSON.parse(xhr.responseText);
+              resolve(asset.browser_download_url);
+            } catch (e) {
+              reject(new Error('Failed to parse upload response'));
+            }
+          } else {
+            reject(new Error(`Failed to upload asset: ${xhr.status} ${xhr.statusText} - ${xhr.responseText}`));
+          }
+        });
+
+        xhr.addEventListener('error', () => {
+          reject(new Error('Network error during upload'));
+        });
+
+        xhr.addEventListener('abort', () => {
+          reject(new Error('Upload cancelled'));
+        });
+
+        xhr.open('POST', `${uploadUrl}?name=${encodeURIComponent(fileName)}`);
+        xhr.setRequestHeader('Authorization', `token ${this.token}`);
+        xhr.setRequestHeader('Accept', 'application/vnd.github.v3+json');
+        xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+        xhr.send(file);
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to upload asset: ${response.status} ${response.statusText} - ${errorText}`);
-      }
-
-      const asset = await response.json();
-
-      // Return the browser download URL (not the API URL)
-      // The browser_download_url is the direct download link
-      return asset.browser_download_url;
     } catch (error) {
       console.error('Error uploading file to release:', error);
       throw new Error(
