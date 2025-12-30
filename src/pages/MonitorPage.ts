@@ -80,7 +80,6 @@ export function MonitorPage(container: HTMLElement, params?: Record<string, stri
         <div class="card">
           <div class="flex items-center justify-between mb-2">
             <h3 class="card-title" style="margin: 0;">Live Logs</h3>
-            ${isRunning ? '<span class="spinner"></span>' : ''}
           </div>
           <div class="logs-container" id="logs-container">
             ${logs.split('\n').map(line => {

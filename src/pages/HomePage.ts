@@ -99,7 +99,7 @@ export function HomePage(container: HTMLElement) {
                 placeholder="https://example.com/boot.img"
               />
               <div class="form-help">
-                Direct download link to boot.img or init_boot.img
+                Direct download link to boot.img / init_boot.img / vendor_boot.img
               </div>
             </div>
 
