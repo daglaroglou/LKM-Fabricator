@@ -7,6 +7,18 @@ on:
         description: 'URL to boot/init_boot image'
         required: true
         type: string
+      image_kmi:
+        description: 'KMI of the device'
+        required: true
+        type: choice
+        options:
+          - 'android12-5.10'
+          - 'android13-5.10'
+          - 'android13-5.15'
+          - 'android14-5.15'
+          - 'android14-6.1'
+          - 'android15-6.6'
+          - 'android16-6.12'
 
 jobs:
   patch:
@@ -51,6 +63,7 @@ jobs:
           chmod a+x ./magiskboot
 
       - name: Patch boot image
+        id: image_patch
         run: |
           echo "Check whether the provided image is an init_boot image or a regular boot image..."
           # Unpack header info and parse line by line
@@ -64,12 +77,14 @@ jobs:
           # Logic: init_boot or vendor_boot must have Header 4+ and a ramdisk size > 0
           mkdir images/
           if [[ ${V:-0} -ge 4 && ${R:-0} -gt 0 ]]; then
+              echo "image=init_boot" >> $GITHUB_OUTPUT
               echo "The provided image is an init_boot.img"
-              #./ksud boot-patch --magiskboot ./magiskboot --kmi $KMI --module $KMI_kernelsu.ko --boot partition.img -o images/ # for lkm, wip
-              #mv images/*.img boot-patched.img
+              ./ksud boot-patch --magiskboot ./magiskboot --kmi ${{ github.event.inputs.image_kmi }} --boot partition.img -o images/
+              mv images/*.img init_boot-patched.img
           else
+              echo "image=boot" >> $GITHUB_OUTPUT
               echo "The provided image is an boot.img"
-              ./ksud boot-patch --magiskboot ./magiskboot --boot partition.img -o images/
+              ./ksud boot-patch --magiskboot ./magiskboot --kmi ${{ github.event.inputs.image_kmi }} --boot partition.img -o images/
               mv images/*.img boot-patched.img
           fi
 
@@ -81,8 +96,17 @@ jobs:
             exit 1
           fi
 
-      - name: Upload patched image
+      - name: Upload patched init_boot image
         uses: actions/upload-artifact@v4
+        if: steps.image_patch.outputs.image == 'init_boot'
+        with:
+          name: init_boot-kernelsu-next-patched-${{ github.run_id }}
+          path: init_boot-patched.img
+          retention-days: 1
+
+      - name: Upload patched boot image
+        uses: actions/upload-artifact@v4
+        if: steps.image_patch.outputs.image == 'boot'
         with:
           name: boot-kernelsu-next-patched-${{ github.run_id }}
           path: boot-patched.img
