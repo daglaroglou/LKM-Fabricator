@@ -1,4 +1,4 @@
-import { ImageSourceType, PatcherType } from '../types';
+import { ImageSourceType, PatcherType, KmiVersion } from '../types';
 import { GitHubAPI } from '../github-api';
 import { uploadToCatbox } from '../utils';
 import { navigateTo } from '../router';
@@ -32,10 +32,21 @@ const patcherInfo = {
   }
 };
 
+const kmiOptions: { value: KmiVersion; label: string }[] = [
+  { value: 'android12-5.10', label: 'Android 12 - 5.10' },
+  { value: 'android13-5.10', label: 'Android 13 - 5.10' },
+  { value: 'android13-5.15', label: 'Android 13 - 5.15' },
+  { value: 'android14-5.15', label: 'Android 14 - 5.15' },
+  { value: 'android14-6.1', label: 'Android 14 - 6.1' },
+  { value: 'android15-6.6', label: 'Android 15 - 6.6' },
+  { value: 'android16-6.12', label: 'Android 16 - 6.12' },
+];
+
 export function HomePage(container: HTMLElement) {
   let selectedFile: File | null = null;
   let sourceType: ImageSourceType = 'file';
   let selectedPatcher: PatcherType = 'kernelsu';
+  let selectedKmi: KmiVersion | null = null;
 
   const render = () => {
     container.innerHTML = `
@@ -131,6 +142,22 @@ export function HomePage(container: HTMLElement) {
               </div>
             </div>
 
+            <!-- KMI Version Selection (hidden for Magisk) -->
+            <div class="form-group" id="kmi-selection-group">
+              <label class="form-label" for="kmi-version">Kernel Module Interface (KMI) *</label>
+              <select id="kmi-version" class="form-select">
+                <option value="" disabled selected>Select KMI version...</option>
+                ${kmiOptions.map(option => `
+                  <option value="${option.value}">
+                    ${option.label}
+                  </option>
+                `).join('')}
+              </select>
+              <div class="form-help">
+                Select the KMI version matching your device's Android version and kernel
+              </div>
+            </div>
+
             <!-- Submit Button -->
             <button type="submit" class="btn btn-block" id="submit-btn">
               Start Patching →
@@ -168,6 +195,21 @@ export function HomePage(container: HTMLElement) {
     const fileUploadGroup = document.getElementById('file-upload-group') as HTMLDivElement;
     const urlInputGroup = document.getElementById('url-input-group') as HTMLDivElement;
     const errorMessage = document.getElementById('error-message') as HTMLDivElement;
+    const kmiSelectionGroup = document.getElementById('kmi-selection-group') as HTMLDivElement;
+    const kmiVersionSelect = document.getElementById('kmi-version') as HTMLSelectElement;
+    const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement;
+
+    // Function to update submit button state
+    const updateSubmitButtonState = () => {
+      if (selectedPatcher === 'magisk') {
+        submitBtn.disabled = false;
+      } else {
+        submitBtn.disabled = !selectedKmi;
+      }
+    };
+
+    // Initialize button state
+    updateSubmitButtonState();
 
     // Patcher selection
     patcherOptions.forEach(option => {
@@ -183,7 +225,27 @@ export function HomePage(container: HTMLElement) {
         const radio = target.querySelector('input[type="radio"]') as HTMLInputElement;
         radio.checked = true;
         selectedPatcher = patcherValue;
+
+        // Show/hide KMI selection based on patcher
+        if (patcherValue === 'magisk') {
+          kmiSelectionGroup.style.display = 'none';
+        } else {
+          kmiSelectionGroup.style.display = 'block';
+        }
+        
+        // Update submit button state
+        updateSubmitButtonState();
       });
+    });
+
+    // KMI version selection
+    kmiVersionSelect.addEventListener('change', (e) => {
+      const target = e.target as HTMLSelectElement;
+      selectedKmi = target.value as KmiVersion;
+      errorMessage.innerHTML = '';
+      
+      // Update submit button state
+      updateSubmitButtonState();
     });
 
     // Source type change
@@ -251,7 +313,6 @@ export function HomePage(container: HTMLElement) {
       e.preventDefault();
       errorMessage.innerHTML = '';
 
-      const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement;
       submitBtn.disabled = true;
       submitBtn.innerHTML = '<span class="spinner"></span> Starting workflow...';
 
@@ -296,8 +357,16 @@ export function HomePage(container: HTMLElement) {
           }
         }
 
-        // Trigger workflow
-        const runId = await api.triggerWorkflow(selectedPatcher, imageUrl); // , imageBase64);
+        // Validate KMI selection for non-Magisk patchers
+        if (selectedPatcher !== 'magisk') {
+          if (!selectedKmi) {
+            throw new Error('Please select a KMI version');
+          }
+        }
+
+        // Trigger workflow (pass kmiVersion only if not magisk)
+        const kmiVersion = selectedPatcher !== 'magisk' ? (selectedKmi ?? undefined) : undefined;
+        const runId = await api.triggerWorkflow(selectedPatcher, imageUrl, kmiVersion); // , imageBase64);
 
         // Navigate to monitor page
         navigateTo(`/monitor/${runId}`);

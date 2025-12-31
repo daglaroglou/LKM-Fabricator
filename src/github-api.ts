@@ -1,5 +1,5 @@
 import { Octokit } from 'octokit';
-import { WorkflowRun, WorkflowJob, Artifact, PatcherType } from './types';
+import { WorkflowRun, WorkflowJob, Artifact, PatcherType, KmiVersion } from './types';
 
 // GitHub repository configuration
 const REPO_OWNER = 'daglaroglou';
@@ -30,6 +30,7 @@ export class GitHubAPI {
   async triggerWorkflow(
     patcherType: PatcherType,
     imageUrl?: string,
+    kmiVersion?: KmiVersion,
     // imageBase64?: string
   ): Promise<number> {
     const workflowFile = this.getWorkflowFile(patcherType);
@@ -37,6 +38,7 @@ export class GitHubAPI {
     // Check total input size (GitHub limit is 65,535 characters for all inputs combined)
     const inputs = {
       image_url: imageUrl || '',
+      kmi_version: kmiVersion || '',
       // image_base64: imageBase64 || '',
     };
     

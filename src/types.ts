@@ -2,11 +2,14 @@ export type PatcherType = 'kernelsu' | 'kernelsu-next' | 'sukisu' | 'apatch' | '
 
 export type ImageSourceType = 'file' | 'url';
 
+export type KmiVersion = 'android12-5.10' | 'android13-5.10' | 'android13-5.15' | 'android14-5.15' | 'android14-6.1' | 'android15-6.6' | 'android16-6.12';
+
 export interface PatchRequest {
   sourceType: ImageSourceType;
   file?: File;
   imageUrl?: string;
   patcherType: PatcherType;
+  kmiVersion?: KmiVersion;
   githubToken: string;
 }
 
